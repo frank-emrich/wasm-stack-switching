@@ -9,7 +9,7 @@
   ;; Tag used to coordinate between generator and consumer: The i32 param
   ;; corresponds to the generated values passed; no values passed back from
   ;; generator to consumer.
-  (tag $yield (param i32))
+  (tag $gen (param i32))
 
 
   (func $print (import "spectest" "print_i32") (param i32))
@@ -20,7 +20,7 @@
     (local.set $i (i32.const 100))
     (loop $l
       ;; Suspend execution, pass current value of $i to consumer
-      (suspend $yield (local.get $i))
+      (suspend $gen (local.get $i))
       ;; Decrement $i and exit loop once $i reaches 0
       (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
       (br_if $l)
@@ -35,9 +35,9 @@
     (local.set $c (cont.new $ct (ref.func $generator)))
 
     (loop $loop
-      (block $on_yield (result i32 (ref $ct))
+      (block $on_gen (result i32 (ref $ct))
         ;; Resume continuation $c
-        (resume $ct (on $yield $on_yield) (local.get $c))
+        (resume $ct (on $gen $on_gen) (local.get $c))
         ;; $generator returned: no more data
         (return)
       )
