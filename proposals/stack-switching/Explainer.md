@@ -21,6 +21,7 @@ validation rules to facilitate stack-switching.
    1. [Suspending continuations](#suspending-continuations)
    1. [Partial continuation application](#partial-continuation-application)
    1. [Continuation lifetime](#continuation-lifetime)
+1. [Further examples](#further-examples)
 1. [Design considerations](#design-considerations)
    1. [Asymmetric switching](#asymmetric-switching)
    1. [Symmetric switching](#symmetric-switching)
@@ -681,6 +682,179 @@ In order to ensure that continuations are one-shot, `resume`,
 `resume_throw`, `switch`, and `cont.bind` destructively modify the
 suspended continuation such that any subsequent use of the same
 suspended continuation will result in a trap.
+
+## Further examples
+
+We now provide examples using tags with result values as well as the
+instructions `cont.bind` and `resume.throw`.
+To this end, we revisit the examples from [Section
+3](#introduction-to-continuation-based-stack-switching).
+
+
+
+### Extending the generator
+
+The `$generator` function introduced in [Section 3.2](#generators)
+produced the values 100 down to 1. I used the tag `$gen`, defined as
+`(tag $gen (param i32))`, to send values to the `$producer` function.
+
+We now consider a situation where the producer wants to indicate to
+the generator to reset itself (i.e., start counting down from 100
+again). To this end, we allow the producer to pass a boolean flag to
+the generator when resuming a continuation. We use type `i32` for the
+flag, leading to the following definition of `$gen`:
+
+```
+(tag $gen (param i32) (result i32))
+```
+
+In the generator, the instruction `(suspend $gen)` now has type `[i32]
+-> [i32]`: Its argument type represents the generated value (as in the
+original version of the example), the result type represents the flag
+obtained back from the producer. We may thus change the generator to
+behave as follows, choosing between resetting or decrementing `$i`:
+
+```wat
+  (func $generator
+    (local $i i32)
+    (local.set $i (i32.const 100))
+    (loop $loop
+      ;; Suspend execution, pass current value of $count to consumer
+      (suspend $gen (local.get $i))
+      ;; We now have the flag on the stack given to us by the consumer, telling
+      ;; us whether to reset the generator or not.
+      (if (result i32)
+        (then (i32.const 100))
+        (else (i32.sub (local.get $i) (i32.const 1)))
+      )
+      (local.tee $i)
+      (br_if $loop)
+      
+    )
+  )
+```
+
+
+In the producer, we then add some logic to pick the value of the flag,
+and pass it to the generator continuation on `resume`. However, this
+poses a challenge: The continuation created with `(cont.new $ct0
+(ref.func $generator)))` has the same type as before: A continuation
+type with no parameter or return types. In contrast, the type of the
+continuation received in a handler block for tag `$gen` is different
+from that type, due to the result type added to `$gen`: The result
+types of the tag become the parameters of the continuation received
+when handling that tag. This means that the producer now has to deal
+with two different continuation types:
+
+```wat
+(type $ft0 (func))
+(type $ft1 (func (param i32)))
+;; Types of continuations used by the generator:
+;; No param or result types for $ct0: $generator function has no
+;; parameters or return values.
+(type $ct0 (cont $ft0))
+;; One param of type i32 for $ct1: An i32 is passed back to the
+;; generator when resuming it, and $generator function has no return
+;; values.
+(type $ct1 (cont $ft1))
+```
+
+To keep the loop in the producer function that resumes continuations
+simple, we want to make sure that there is only a single local
+variable that contains the next continuation to resume. We can use
+`cont.bind` to turn continuations from type `(ref $ct1)` into `(ref
+$ct0)` by providing the value. 
+
+The overall function is then defined as follows:
+
+```wat
+  (func $consumer (export "consumer")
+    ;; The continuation of the generator
+    (local $c0 (ref $ct0))
+    ;; For temporarily storing the suspended generator, as there is no
+    ;; stack duplication instructions in Wasm.
+    (local $c1 (ref $ct1))
+    (local $i i32)
+    ;; Create continuation executing function $generator.
+    ;; Execution only starts when resumed for the first time.
+    (local.set $c0 (cont.new $ct0 (ref.func $generator)))
+    (local.set $i (i32.const 1))
+
+    (loop $loop
+      (block $on_gen (result i32 (ref $ct1))
+        ;; Resume continuation $c0
+        (resume $ct0 (on $gen $on_gen) (local.get $c0))
+        ;; $generator returned: no more data
+        (return)
+      )
+      ;; Generator suspended, stack now contains [i32 (ref $ct0)]
+      ;; Save continuation to resume it in next iteration
+      (local.set $c1)
+      ;; Stack now contains the i32 value yielded by $generator
+      (call $print)
+
+      ;; calculate flag to be passed back to generator:
+      ;; reset after the 42nd iteration
+      (i32.eq (local.get $i) (i32.const 42))
+      (cont.bind $ct1 $ct0 (local.get $c1))
+      (local.set $c0)
+
+      (local.tee $i (i32.add (local.get $i) (i32.const 1)))
+      (br_if $loop)
+    )
+  )
+
+```
+
+
+Here, we set determine the set for resetting the generator exactly
+once, after it returned 42 values. 
+
+
+The full version of the extended generator example can be found
+[here](examples/generator-extended.wast).
+
+### Cancelling tasks 
+
+We now revisit the task scheduling example originally introduced 
+in [Section 3.2](#task-scheduling).
+
+We may want to adapt it such that there is an upper bound on the
+number of tasks that can exist at the same time. Once that limit is
+reached, any further tasks should be cancelled instead of being
+scheduled for execution.
+
+We can implement this with a small addition to the previous example.
+Instead of adding tasks to be scheduled directly to a queue, we
+call the following function `$schedule_task` with any continuation that 
+_should_ be scheduled.
+
+```wat
+(func $schedule_task (param $c (ref null $ct))
+  ;; If the task queue is too long, cancel a task in the queue
+  (if (i32.ge_s (call $task_queue-count) (global.get $concurrent_task_limit))
+    (then
+      (block $h
+        (try_table (catch $abort $h) (resume_throw $ct $abort (call $task_dequeue))))))
+  (call $task_enqueue (local.get $c))
+)
+```
+
+The function checks if the current number of elements in the queue has
+already reached the limit. If so, the function takes an existing
+continuation from the queue and calls `resume_throw` on it. Note that
+the `resume_throw` instruction is annotated with a new tag, `$abort`.
+This tag denotes a newly defined exception that will be raised at the
+suspension point of the continuation. We then wrap the `resume_throw`
+instruction in a `try_table`, which installs an exception handler for
+`$abort`.
+In total, this means that the exception raised at the suspension point
+cannot escape outside of the `$schedule_task`, which then proceeds to
+enqueue the continuation given as a function argument.
+
+The full version of the extended generator example can be found
+[here](examples/scheduler2-throw.wast).
+
 
 ## Design considerations
 
