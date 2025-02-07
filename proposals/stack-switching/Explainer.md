@@ -117,20 +117,19 @@ The overall module implementing our example has the following shape.
 ```wat
 (module $generator
   (type $ft (func))
-  ;; Types of continuations used by the generator:
+  ;; Type of continuations used by the generator:
   ;; No need for param or result types: No data passed back to the
   ;; generator when resuming it, and $generator function has no return
   ;; values.
   (type $ct (cont $ft))
 
-  ;; Tag used to coordinate between generator and consumer: The i32 param
-  ;; corresponds to the generated values passed; no values passed back from
-  ;; generator to consumer.
-  (tag $gen (param i32))
-
-
   (func $print (import "spectest" "print_i32") (param i32))
 
+  ;; Tag used to coordinate between generator and consumer: The i32 param
+  ;; corresponds to the generated values passed to consumer; no values passed
+  ;; back from generator to consumer.
+  (tag $gen (param i32))
+ 
   ;; Simple generator yielding values from 100 down to 1
   (func $generator ...)
   (elem declare func $generator)
@@ -148,16 +147,16 @@ manipulate suspended continuations of type `(ref $ct)`.
 The generator is defined as follows.
 
 ```wat
-;; Simple generator yielding values from 100 down to 1
+;; Simple generator yielding values from 100 down to 1.
 (func $generator
   (local $i i32)
   (local.set $i (i32.const 100))
-  (loop $l
-    ;; Suspend execution, pass current value of $i to consumer
+  (loop $loop
+    ;; Suspend execution, pass current value of $i to consumer.
     (suspend $gen (local.get $i))
-    ;; Decrement $i and exit loop once $i reaches 0
+    ;; Decrement $i and exit loop once $i reaches 0.
     (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
-    (br_if $l)
+    (br_if $loop)
   )
 )
 ```
@@ -179,9 +178,9 @@ The consumer is defined as follows.
 
   (loop $loop
     (block $on_gen (result i32 (ref $ct))
-      ;; Resume continuation $c
+      ;; Resume continuation $c.
       (resume $ct (on $gen $on_gen) (local.get $c))
-      ;; $generator returned: no more data
+      ;; $generator returned: no more data.
       (return)
     )
     ;; Generator suspended, stack now contains [i32 (ref $ct)]
