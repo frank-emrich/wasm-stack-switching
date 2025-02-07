@@ -818,16 +818,20 @@ The full version of the extended generator example can be found
 
 We now revisit the task scheduling example originally introduced 
 in [Section 3](#task-scheduling).
+To yield execution, tasks either suspend to the scheduler running in
+the parent (first variant of example) or call a scheduling function
+that uses `switch` (second variant).
 
-We may want to adapt it such that there is an upper bound on the
+
+We may want to adapt the example such that there is a limit on the
 number of tasks that can exist at the same time. Once that limit is
-reached, any further tasks should be cancelled instead of being
-scheduled for execution.
+reached, some task must be canceled before being able to schedule
+another one.
 
 We can implement this with a small addition to the previous example.
 Instead of adding tasks to be scheduled directly to a queue, we
 call the following function `$schedule_task` with any continuation that 
-_should_ be scheduled.
+should be scheduled.
 
 ```wat
 (func $schedule_task (param $c (ref null $ct))
@@ -835,22 +839,30 @@ _should_ be scheduled.
   (if (i32.ge_s (call $task_queue-count) (global.get $concurrent_task_limit))
     (then
       (block $h
-        (try_table (catch $abort $h) (resume_throw $ct $abort (call $task_dequeue))))))
+        (try_table (catch $abort $h) 
+          (resume_throw $ct $abort (call $task_dequeue))
+        )
+      )
+    )
+  )
   (call $task_enqueue (local.get $c))
 )
 ```
 
 The function checks if the current number of elements in the queue has
 already reached the limit. If so, the function takes an existing
-continuation from the queue and calls `resume_throw` on it. Note that
-the `resume_throw` instruction is annotated with a new tag, `$abort`.
-This tag denotes a newly defined exception that will be raised at the
+continuation from the queue and calls `resume_throw` on it. 
+
+Note that
+the `resume_throw` instruction is annotated with a newly defined tag, `$abort`.
+This tag denotes an exception that will be raised at the
 suspension point of the continuation. We then wrap the `resume_throw`
 instruction in a `try_table`, which installs an exception handler for
 `$abort`.
-In total, this means that the exception raised at the suspension point
-cannot escape outside of the `$schedule_task`, which then proceeds to
-enqueue the continuation given as a function argument.
+Altogether this means that the exception raised at the suspension
+point cannot escape outside of the `$schedule_task` function, which
+then proceeds to enqueue the continuation given as a function
+argument.
 
 The full version of the extended generator example can be found
 [here](examples/scheduler2-throw.wast).

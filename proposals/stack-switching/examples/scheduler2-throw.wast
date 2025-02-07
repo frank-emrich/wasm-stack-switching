@@ -87,7 +87,12 @@
     (if (i32.ge_s (call $task_queue-count) (global.get $concurrent_task_limit))
       (then
         (block $h
-          (try_table (catch $abort $h) (resume_throw $ct $abort (call $task_dequeue))))))
+          (try_table (catch $abort $h)
+            (resume_throw $ct $abort (call $task_dequeue))
+          )
+        )
+      )
+    )
     (call $task_enqueue (local.get $c))
   )
 
