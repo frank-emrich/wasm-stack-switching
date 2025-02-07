@@ -25,7 +25,7 @@
     (local $i i32)
     (local.set $i (i32.const 100))
     (loop $loop
-      ;; Suspend execution, pass current value of $i to consumer
+      ;; Suspend execution, pass current value of $i to consumer.
       (suspend $gen (local.get $i))
       ;; We now have the flag on the stack given to us by the consumer, telling
       ;; us whether to reset the generator or not.
