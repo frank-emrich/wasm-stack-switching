@@ -694,7 +694,7 @@ To this end, we revisit the examples from [Section
 ### Extending the generator
 
 The `$generator` function introduced in [Section 3.2](#generators)
-produced the values 100 down to 1. I used the tag `$gen`, defined as
+produced the values 100 down to 1. It uses the tag `$gen`, defined as
 `(tag $gen (param i32))`, to send values to the `$producer` function.
 
 We now consider a situation where the producer wants to indicate to
@@ -703,15 +703,15 @@ again). To this end, we allow the producer to pass a boolean flag to
 the generator when resuming a continuation. We use type `i32` for the
 flag, leading to the following definition of `$gen`:
 
-```
+```wat
 (tag $gen (param i32) (result i32))
 ```
 
 In the generator, the instruction `(suspend $gen)` now has type `[i32]
 -> [i32]`: Its argument type represents the generated value (as in the
 original version of the example), the result type represents the flag
-obtained back from the producer. We may thus change the generator to
-behave as follows, choosing between resetting or decrementing `$i`:
+obtained back from the producer. We change the generator to behave as
+follows, choosing between resetting or decrementing `$i`:
 
 ```wat
   (func $generator
@@ -728,7 +728,6 @@ behave as follows, choosing between resetting or decrementing `$i`:
       )
       (local.tee $i)
       (br_if $loop)
-      
     )
   )
 ```
@@ -741,9 +740,9 @@ poses a challenge: The continuation created with `(cont.new $ct0
 type with no parameter or return types. In contrast, the type of the
 continuation received in a handler block for tag `$gen` is different
 from that type, due to the result type added to `$gen`: The result
-types of the tag become the parameters of the continuation received
-when handling that tag. This means that the producer now has to deal
-with two different continuation types:
+type of the tag becomes an additional parameter of the continuation
+received when handling that tag. This means that the producer now has
+to deal with two different continuation types:
 
 ```wat
 (type $ft0 (func))
@@ -758,11 +757,11 @@ with two different continuation types:
 (type $ct1 (cont $ft1))
 ```
 
-To keep the loop in the producer function that resumes continuations
-simple, we want to make sure that there is only a single local
-variable that contains the next continuation to resume. We can use
+To avoid making the producer function unnecessarily complicated, we
+want to make sure that there is only a single local variable that
+contains the next continuation to resume. We can use
 `cont.bind` to turn continuations from type `(ref $ct1)` into `(ref
-$ct0)` by providing the value. 
+$ct0)` by binding the value of the flag to be passed.
 
 The overall function is then defined as follows:
 
@@ -806,9 +805,8 @@ The overall function is then defined as follows:
 ```
 
 
-Here, we set determine the set for resetting the generator exactly
+Here, we set the flag for resetting the generator exactly
 once, after it returned 42 values. 
-
 
 The full version of the extended generator example can be found
 [here](examples/generator-extended.wast).
