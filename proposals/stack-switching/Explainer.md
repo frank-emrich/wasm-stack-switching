@@ -838,8 +838,8 @@ should be scheduled.
   ;; If the task queue is too long, cancel a task in the queue
   (if (i32.ge_s (call $task_queue-count) (global.get $concurrent_task_limit))
     (then
-      (block $h
-        (try_table (catch $abort $h) 
+      (block $exc_handler
+        (try_table (catch $abort $exc_handler) 
           (resume_throw $ct $abort (call $task_dequeue))
         )
       )
@@ -858,7 +858,7 @@ the `resume_throw` instruction is annotated with a newly defined tag, `$abort`.
 This tag denotes an exception that will be raised at the
 suspension point of the continuation. We then wrap the `resume_throw`
 instruction in a `try_table`, which installs an exception handler for
-`$abort`.
+`$abort`. This exception handler simply does nothing.
 Altogether this means that the exception raised at the suspension
 point cannot escape outside of the `$schedule_task` function, which
 then proceeds to enqueue the continuation given as a function

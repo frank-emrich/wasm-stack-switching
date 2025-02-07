@@ -86,8 +86,8 @@
     ;; If the task queue is too long, cancel a task in the queue
     (if (i32.ge_s (call $task_queue-count) (global.get $concurrent_task_limit))
       (then
-        (block $h
-          (try_table (catch $abort $h)
+        (block $exc_handler
+          (try_table (catch $abort $exc_handler)
             (resume_throw $ct $abort (call $task_dequeue))
           )
         )
