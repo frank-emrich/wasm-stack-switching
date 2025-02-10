@@ -62,7 +62,7 @@
 )
 (register "queue")
 
-(module $scheduler-switch
+(module $scheduler2-switch
   (rec
     (type $ft (func (param (ref null $ct))))
     ;; Continuation type of all tasks
@@ -154,7 +154,6 @@
   ;; partial applications of $task_impl.
   ;; Indeed, we could obtain *continuations* running each $task_i from a
   ;; continuation running $task_impl and cont.bind.
-  ;; See scheduler2-suspend-bind.wast for an example.
 
   (func $task_3 (type $ft)
     (i32.const 3)

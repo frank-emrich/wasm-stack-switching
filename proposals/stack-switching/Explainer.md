@@ -864,8 +864,10 @@ point cannot escape outside of the `$schedule_task` function, which
 then proceeds to enqueue the continuation given as a function
 argument.
 
-The full version of the extended generator example can be found
-[here](examples/scheduler2-throw.wast).
+Integrating the `$schedule_task` function above into the second
+variant of the task scheduling example (i.e., the variant using
+`switch`) can be found [here](examples/scheduler2-throw.wast).
+The changes to the first variant are analogous.
 
 
 ## Design considerations
